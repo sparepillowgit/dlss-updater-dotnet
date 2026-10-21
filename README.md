@@ -47,9 +47,25 @@ Download the latest version:
 https://github.com/sparepillowgit/dlss-updater-dotnet/releases/latest
 
 - Portable (no installation required)
-- Requires .NET Framework 4.8 (included with Windows 10 version 1903 or later and Windows 11)
 
 ---
+
+## Requirements
+
+- Windows 10 or Windows 11
+- .NET Framework 4.8 Runtime (included with Windows 10 version 1903 and later, and Windows 11)*
+
+<sub>* Earlier supported Windows versions may require a separate runtime installation. [Download .NET Framework 4.8 Runtime](https://dotnet.microsoft.com/en-us/download/dotnet-framework/thank-you/net48-web-installer).</sub>
+
+---
+
+## Uninstall
+
+DLSS Updater is portable and requires no installation. It doesn't install services, run background processes, or make permanent system changes. To remove it, simply close the application and delete the executable.
+
+Cached DLSS files are stored in `%LOCALAPPDATA%\DLSS Updater`. Delete this folder if you want to remove the cached files as well.
+
+Any backups created during updates are stored alongside the original DLSS files as `.dubackup.zip` files and can be deleted manually if no longer needed.
 
 ## Usage
 
