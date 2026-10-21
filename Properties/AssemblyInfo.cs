@@ -4,12 +4,12 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Windows;
 
-[assembly: AssemblyTitle("dlss-updater")]
-[assembly: AssemblyDescription("")]
+[assembly: AssemblyTitle("DLSS Updater")]
+[assembly: AssemblyDescription("A simple desktop tool for finding and updating NVIDIA DLSS files in your game folders.")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
-[assembly: AssemblyProduct("dlss-updater")]
-[assembly: AssemblyCopyright("Copyright ©  2026")]
+[assembly: AssemblyCompany("www.yohanesmar.io")]
+[assembly: AssemblyProduct("DLSS Updater")]
+[assembly: AssemblyCopyright("Copyright © 2026 Yohanes Mario")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -26,3 +26,4 @@ using System.Windows;
 
 [assembly: AssemblyVersion("1.0.0.0")]
 [assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyInformationalVersion("1.0.0")]
