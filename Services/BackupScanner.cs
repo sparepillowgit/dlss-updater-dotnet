@@ -12,7 +12,8 @@ namespace dlss_updater.Services
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
         public static List<ScannedFile> FindBackupFiles(
-            string folderPath)
+            string folderPath,
+            ICollection<string> warningPaths = null)
         {
             List<ScannedFile> results =
                 new List<ScannedFile>();
@@ -25,14 +26,16 @@ namespace dlss_updater.Services
 
             SearchDirectory(
                 folderPath,
-                results);
+                results,
+                warningPaths);
 
             return results;
         }
 
         private static void SearchDirectory(
             string folderPath,
-            List<ScannedFile> results)
+            List<ScannedFile> results,
+            ICollection<string> warningPaths)
         {
             try
             {
@@ -56,6 +59,7 @@ namespace dlss_updater.Services
             }
             catch
             {
+                warningPaths?.Add(folderPath);
             }
 
             string[] directories;
@@ -66,6 +70,7 @@ namespace dlss_updater.Services
             }
             catch
             {
+                warningPaths?.Add(folderPath);
                 return;
             }
 
@@ -73,7 +78,8 @@ namespace dlss_updater.Services
             {
                 SearchDirectory(
                     directory,
-                    results);
+                    results,
+                    warningPaths);
             }
         }
     }

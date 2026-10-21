@@ -34,7 +34,8 @@ namespace dlss_updater.Services
     {
         public static async Task<DlssUpdateResult> UpdateAsync(
             IList<ScannedFile> installedFiles,
-            bool overwriteExistingBackups)
+            bool overwriteExistingBackups,
+            IProgress<string> progress = null)
         {
             DlssUpdateResult result = new DlssUpdateResult();
 
@@ -46,54 +47,79 @@ namespace dlss_updater.Services
             }
 
             Dictionary<string, DlssReleaseAsset> manifest =
-                await DlssReleaseClient.GetLatestManifestAsync();
+                await GetLatestManifestAsync(progress);
 
             Dictionary<string, string> downloadedFiles =
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            try
+            int fileIndex = 0;
+
+            foreach (ScannedFile installedFile in installedFiles)
             {
-                foreach (ScannedFile installedFile in installedFiles)
+                fileIndex++;
+                string fileName = Path.GetFileName(installedFile.Path);
+                progress?.Report(
+                    "Checking " + fileName + " (" + fileIndex +
+                    " of " + installedFiles.Count + ")…");
+
+                DlssReleaseAsset releaseAsset;
+
+                if (!manifest.TryGetValue(fileName, out releaseAsset))
                 {
-                    string fileName = Path.GetFileName(installedFile.Path);
-                    DlssReleaseAsset releaseAsset;
+                    result.Errors.Add(
+                        "No release entry was found for " + fileName + ".");
+                    continue;
+                }
 
-                    if (!manifest.TryGetValue(fileName, out releaseAsset))
+                Version installedVersion;
+                Version latestVersion;
+
+                if (!Version.TryParse(installedFile.Version, out installedVersion) ||
+                    !Version.TryParse(releaseAsset.Version, out latestVersion))
+                {
+                    result.Errors.Add(
+                        "Could not compare the version for " + installedFile.Path + ".");
+                    continue;
+                }
+
+                if (latestVersion <= installedVersion)
+                {
+                    result.AlreadyCurrentFiles++;
+                    continue;
+                }
+
+                if (!AreVersionsCompatible(installedVersion, latestVersion))
+                {
+                    result.Errors.Add(
+                        "Skipped " + fileName + ": updating from " +
+                        installedVersion + " to " + latestVersion +
+                        " crosses an unsupported major version boundary.");
+                    continue;
+                }
+
+                string downloadedPath;
+
+                if (!downloadedFiles.TryGetValue(fileName, out downloadedPath))
+                {
+                    if (DlssReleaseClient.TryGetCachedFile(
+                        fileName,
+                        latestVersion.ToString(),
+                        releaseAsset.Sha256,
+                        out downloadedPath))
                     {
-                        result.Errors.Add(
-                            "No release entry was found for " + fileName + ".");
-                        continue;
+                        progress?.Report("Using cached " + fileName + "…");
                     }
-
-                    Version installedVersion;
-                    Version latestVersion;
-
-                    if (!Version.TryParse(installedFile.Version, out installedVersion) ||
-                        !Version.TryParse(releaseAsset.Version, out latestVersion))
-                    {
-                        result.Errors.Add(
-                            "Could not compare the version for " + installedFile.Path + ".");
-                        continue;
-                    }
-
-                    if (latestVersion <= installedVersion)
-                    {
-                        result.AlreadyCurrentFiles++;
-                        continue;
-                    }
-
-                    string downloadedPath;
-
-                    if (!downloadedFiles.TryGetValue(fileName, out downloadedPath))
+                    else
                     {
                         try
                         {
+                            progress?.Report("Downloading " + fileName + "…");
                             downloadedPath =
-                                await DlssReleaseClient.DownloadToTemporaryFileAsync(
+                                await DlssReleaseClient.DownloadToCacheAsync(
                                     releaseAsset.Url,
-                                    fileName);
-
-                            downloadedFiles[fileName] = downloadedPath;
+                                    fileName,
+                                    latestVersion.ToString(),
+                                    releaseAsset.Sha256);
                         }
                         catch (Exception ex)
                         {
@@ -103,36 +129,59 @@ namespace dlss_updater.Services
                         }
                     }
 
-                    try
-                    {
-                        BackupArchiveService.CreateBackup(
-                            installedFile.Path,
-                            installedVersion.ToString(),
-                            overwriteExistingBackups);
-
-                        ReplaceFile(downloadedPath, installedFile.Path);
-                        installedFile.Version = latestVersion.ToString();
-                        result.UpdatedFiles++;
-                    }
-                    catch (Exception ex)
-                    {
-                        result.Errors.Add(
-                            "Could not update " + installedFile.Path + ": " + ex.Message);
-                    }
+                    downloadedFiles[fileName] = downloadedPath;
                 }
-            }
-            finally
-            {
-                foreach (string downloadedPath in downloadedFiles.Values)
+
+                try
                 {
-                    if (File.Exists(downloadedPath))
-                    {
-                        File.Delete(downloadedPath);
-                    }
+                    progress?.Report("Updating " + fileName + "…");
+                    BackupArchiveService.CreateBackup(
+                        installedFile.Path,
+                        installedVersion.ToString(),
+                        overwriteExistingBackups);
+
+                    ReplaceFile(downloadedPath, installedFile.Path);
+                    installedFile.Version = latestVersion.ToString();
+                    result.UpdatedFiles++;
+                }
+                catch (Exception ex)
+                {
+                    result.Errors.Add(
+                        "Could not update " + installedFile.Path + ": " + ex.Message);
                 }
             }
 
             return result;
+        }
+
+        private static bool AreVersionsCompatible(
+            Version installedVersion,
+            Version latestVersion)
+        {
+            int installedMajor = GetDlssCompatibilityMajor(installedVersion.Major);
+            int latestMajor = GetDlssCompatibilityMajor(latestVersion.Major);
+
+            if (installedMajor == latestMajor)
+            {
+                return true;
+            }
+
+            return (installedMajor == 2 || installedMajor == 3) &&
+                (latestMajor == 2 || latestMajor == 3);
+        }
+
+        private static int GetDlssCompatibilityMajor(int fileVersionMajor)
+        {
+            return fileVersionMajor >= 100
+                ? fileVersionMajor / 100
+                : fileVersionMajor;
+        }
+
+        private static async Task<Dictionary<string, DlssReleaseAsset>>
+            GetLatestManifestAsync(IProgress<string> progress)
+        {
+            progress?.Report("Checking for the latest DLSS versions…");
+            return await DlssReleaseClient.GetLatestManifestAsync();
         }
 
         private static void ReplaceFile(

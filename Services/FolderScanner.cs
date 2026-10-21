@@ -15,7 +15,8 @@ namespace dlss_updater.Services
     {
         public static List<ScannedFile> FindFiles(
             string folderPath,
-            string fileName)
+            string fileName,
+            ICollection<string> warningPaths = null)
         {
             List<ScannedFile> results =
                 new List<ScannedFile>();
@@ -29,7 +30,8 @@ namespace dlss_updater.Services
             SearchDirectory(
                 folderPath,
                 fileName,
-                results);
+                results,
+                warningPaths);
 
             return results;
         }
@@ -37,7 +39,8 @@ namespace dlss_updater.Services
         private static void SearchDirectory(
             string folderPath,
             string fileName,
-            List<ScannedFile> results)
+            List<ScannedFile> results,
+            ICollection<string> warningPaths)
         {
             try
             {
@@ -58,6 +61,7 @@ namespace dlss_updater.Services
             }
             catch
             {
+                warningPaths?.Add(folderPath);
             }
 
             string[] directories;
@@ -70,6 +74,7 @@ namespace dlss_updater.Services
             }
             catch
             {
+                warningPaths?.Add(folderPath);
                 return;
             }
 
@@ -78,7 +83,8 @@ namespace dlss_updater.Services
                 SearchDirectory(
                     directory,
                     fileName,
-                    results);
+                    results,
+                    warningPaths);
             }
         }
 

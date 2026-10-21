@@ -141,6 +141,18 @@ namespace dlss_updater.Services
                 {
                     RestoreBackup(item.Value.Path, item.Key);
                     result.RestoredFiles++;
+
+                    try
+                    {
+                        File.Delete(item.Value.Path);
+                        result.DeletedFiles++;
+                    }
+                    catch (Exception ex)
+                    {
+                        result.Errors.Add(
+                            "Restored " + item.Key + " but could not delete its backup " +
+                            item.Value.Path + ": " + ex.Message);
+                    }
                 }
                 catch (Exception ex)
                 {

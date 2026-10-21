@@ -18,6 +18,8 @@ namespace dlss_updater
             new SolidColorBrush(Color.FromRgb(102, 102, 102));
         private static readonly SolidColorBrush SuccessStatusBrush =
             new SolidColorBrush(Color.FromRgb(46, 125, 50));
+        private static readonly SolidColorBrush WarningStatusBrush =
+            new SolidColorBrush(Color.FromRgb(156, 101, 0));
 
         private List<ScannedFile> _dlssFiles =
             new List<ScannedFile>();
@@ -31,10 +33,14 @@ namespace dlss_updater
         private List<ScannedFile> _backupFiles =
             new List<ScannedFile>();
 
+        private List<string> _scanWarningPaths =
+            new List<string>();
+
         private string _scannedFolderPath = string.Empty;
         private CancellationTokenSource _folderPathDebounce;
         private int _folderScanGeneration;
         private bool _suppressFolderPathChange;
+        private bool _updateInProgress;
 
         public MainWindow()
         {
@@ -169,6 +175,7 @@ namespace dlss_updater
             _dlssdFiles = new List<ScannedFile>();
             _dlssgFiles = new List<ScannedFile>();
             _backupFiles = new List<ScannedFile>();
+            _scanWarningPaths = new List<string>();
 
             DlssSectionCard.IsEnabled = false;
             DlssSectionCard.Opacity = 0.5;
@@ -182,8 +189,12 @@ namespace dlss_updater
             OverwriteToggle.IsEnabled = false;
             SetBackupButtonsEnabled(false);
             DetailsFileListPanel.Children.Clear();
+            DetailsWarningListPanel.Children.Clear();
+            DetailsWarningsCard.Visibility = Visibility.Collapsed;
             DetailsSummaryText.Text = string.Empty;
-            ShowDetailsButton.Visibility = Visibility.Collapsed;
+            ShowDetailsButton.Content = "Show details";
+            ShowDetailsButton.IsEnabled = false;
+            ShowDetailsButton.Visibility = Visibility.Visible;
         }
 
         private void CancelPendingFolderPathScan()
@@ -268,44 +279,52 @@ namespace dlss_updater
             SetFolderPathText(folder);
             int generation = ++_folderScanGeneration;
 
-            DlssSectionCard.IsEnabled = true;
-            DlssSectionCard.Opacity = 1.0;
-            BackupSectionCard.IsEnabled = true;
-            BackupSectionCard.Opacity = 1.0;
-            OverwriteToggle.IsEnabled = true;
+            DlssSectionCard.IsEnabled = !_updateInProgress;
+            DlssSectionCard.Opacity = _updateInProgress ? 0.65 : 1.0;
+            BackupSectionCard.IsEnabled = !_updateInProgress;
+            BackupSectionCard.Opacity = _updateInProgress ? 0.65 : 1.0;
+            OverwriteToggle.IsEnabled = !_updateInProgress;
             UpdateButton.IsEnabled = false;
             UpdateButton.Opacity = 0.5;
 
             ResetFileLists();
             SetSearchingState();
-            SetStatus(BackupStatusText, "Searching for backup...", NeutralStatusBrush);
+            SetStatus(BackupStatusText, "Searching for backups...", NeutralStatusBrush);
             RestoreBackupButton.IsEnabled = false;
             DeleteBackupButton.IsEnabled = false;
 
             Stopwatch stopwatch =
                 Stopwatch.StartNew();
 
+            List<string> dlssWarnings = new List<string>();
+            List<string> dlssdWarnings = new List<string>();
+            List<string> dlssgWarnings = new List<string>();
+            List<string> backupWarnings = new List<string>();
+
             Task<List<ScannedFile>> dlssTask =
                 Task.Run(() =>
                     FolderScanner.FindFiles(
                         folder,
-                        "nvngx_dlss.dll"));
+                        "nvngx_dlss.dll",
+                        dlssWarnings));
 
             Task<List<ScannedFile>> dlssdTask =
                 Task.Run(() =>
                     FolderScanner.FindFiles(
                         folder,
-                        "nvngx_dlssd.dll"));
+                        "nvngx_dlssd.dll",
+                        dlssdWarnings));
 
             Task<List<ScannedFile>> dlssgTask =
                 Task.Run(() =>
                     FolderScanner.FindFiles(
                         folder,
-                        "nvngx_dlssg.dll"));
+                        "nvngx_dlssg.dll",
+                        dlssgWarnings));
 
             Task<List<ScannedFile>> backupTask =
                 Task.Run(() =>
-                    BackupScanner.FindBackupFiles(folder));
+                    BackupScanner.FindBackupFiles(folder, backupWarnings));
 
             await Task.WhenAll(
                 dlssTask,
@@ -336,6 +355,11 @@ namespace dlss_updater
             _dlssdFiles = await dlssdTask;
             _dlssgFiles = await dlssgTask;
             _backupFiles = await backupTask;
+            _scanWarningPaths = MergeScanWarningPaths(
+                dlssWarnings,
+                dlssdWarnings,
+                dlssgWarnings,
+                backupWarnings);
             UpdateDlssSummary();
             PopulateDlssDetails(folder);
             UpdateBackupResult(_backupFiles);
@@ -345,6 +369,11 @@ namespace dlss_updater
             UpdateButton.IsEnabled = hasDlssFiles;
             UpdateButton.Opacity = hasDlssFiles ? 1.0 : 0.5;
             _scannedFolderPath = folder;
+
+            if (_updateInProgress)
+            {
+                SetUpdateInProgress(true);
+            }
         }
 
         private async void UpdateButton_Click(
@@ -352,25 +381,38 @@ namespace dlss_updater
             RoutedEventArgs e)
         {
             string folder = FolderPathTextBox.Text;
-            List<ScannedFile> filesToUpdate =
-                new List<ScannedFile>();
 
-            filesToUpdate.AddRange(_dlssFiles);
-            filesToUpdate.AddRange(_dlssdFiles);
-            filesToUpdate.AddRange(_dlssgFiles);
-
+            SetUpdateInProgress(true);
             UpdateButton.IsEnabled = false;
             UpdateButton.Content = "Updating...";
+            UpdateProgressText.Text = "Rescanning folder before update…";
+            UpdateProgressPanel.Visibility = Visibility.Visible;
+            IProgress<string> progress = new Progress<string>(message =>
+                UpdateProgressText.Text = message);
 
             try
             {
+                await ScanFolderAsync(folder);
+
+                List<ScannedFile> filesToUpdate =
+                    new List<ScannedFile>();
+                filesToUpdate.AddRange(_dlssFiles);
+                filesToUpdate.AddRange(_dlssdFiles);
+                filesToUpdate.AddRange(_dlssgFiles);
+
                 DlssUpdateResult result =
                     await GameFolderUpdateService.UpdateAsync(
                         filesToUpdate,
-                        OverwriteToggle.IsChecked == true);
+                        OverwriteToggle.IsChecked == true,
+                        progress);
 
+                progress.Report("Refreshing scan results…");
+                List<string> backupWarnings = new List<string>();
                 _backupFiles = await Task.Run(() =>
-                    BackupScanner.FindBackupFiles(folder));
+                    BackupScanner.FindBackupFiles(folder, backupWarnings));
+                _scanWarningPaths = MergeScanWarningPaths(
+                    _scanWarningPaths,
+                    backupWarnings);
 
                 InvokeOnUiThread(() =>
                 {
@@ -401,6 +443,8 @@ namespace dlss_updater
             {
                 InvokeOnUiThread(() =>
                 {
+                    UpdateProgressPanel.Visibility = Visibility.Hidden;
+                    SetUpdateInProgress(false);
                     UpdateButton.Content = "Update";
                     bool hasDlssFiles =
                         _dlssFiles.Count + _dlssdFiles.Count + _dlssgFiles.Count > 0;
@@ -483,10 +527,16 @@ namespace dlss_updater
                 BackupOperationResult result = await Task.Run(() =>
                     BackupArchiveService.DeleteBackups(_backupFiles));
 
+                List<string> backupWarnings = new List<string>();
                 _backupFiles = await Task.Run(() =>
-                    BackupScanner.FindBackupFiles(folder));
+                    BackupScanner.FindBackupFiles(folder, backupWarnings));
+                _scanWarningPaths = MergeScanWarningPaths(
+                    _scanWarningPaths,
+                    backupWarnings);
                 InvokeOnUiThread(() =>
                 {
+                    UpdateDlssSummary();
+                    PopulateDlssDetails(folder);
                     UpdateBackupResult(_backupFiles);
                     MessageBox.Show(
                         this,
@@ -515,14 +565,18 @@ namespace dlss_updater
 
         private async Task RefreshScannedFilesAsync(string folder)
         {
+            List<string> dlssWarnings = new List<string>();
+            List<string> dlssdWarnings = new List<string>();
+            List<string> dlssgWarnings = new List<string>();
+            List<string> backupWarnings = new List<string>();
             Task<List<ScannedFile>> dlssTask = Task.Run(() =>
-                FolderScanner.FindFiles(folder, "nvngx_dlss.dll"));
+                FolderScanner.FindFiles(folder, "nvngx_dlss.dll", dlssWarnings));
             Task<List<ScannedFile>> dlssdTask = Task.Run(() =>
-                FolderScanner.FindFiles(folder, "nvngx_dlssd.dll"));
+                FolderScanner.FindFiles(folder, "nvngx_dlssd.dll", dlssdWarnings));
             Task<List<ScannedFile>> dlssgTask = Task.Run(() =>
-                FolderScanner.FindFiles(folder, "nvngx_dlssg.dll"));
+                FolderScanner.FindFiles(folder, "nvngx_dlssg.dll", dlssgWarnings));
             Task<List<ScannedFile>> backupTask = Task.Run(() =>
-                BackupScanner.FindBackupFiles(folder));
+                BackupScanner.FindBackupFiles(folder, backupWarnings));
 
             await Task.WhenAll(dlssTask, dlssdTask, dlssgTask, backupTask);
 
@@ -530,6 +584,11 @@ namespace dlss_updater
             _dlssdFiles = await dlssdTask;
             _dlssgFiles = await dlssgTask;
             _backupFiles = await backupTask;
+            _scanWarningPaths = MergeScanWarningPaths(
+                dlssWarnings,
+                dlssdWarnings,
+                dlssgWarnings,
+                backupWarnings);
 
             InvokeOnUiThread(() =>
             {
@@ -555,10 +614,48 @@ namespace dlss_updater
             Dispatcher.Invoke(action);
         }
 
+        private List<string> MergeScanWarningPaths(
+            params ICollection<string>[] warningPathCollections)
+        {
+            HashSet<string> uniquePaths =
+                new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (ICollection<string> paths in warningPathCollections)
+            {
+                foreach (string path in paths)
+                {
+                    uniquePaths.Add(path);
+                }
+            }
+
+            List<string> results = new List<string>(uniquePaths);
+            results.Sort(StringComparer.OrdinalIgnoreCase);
+            return results;
+        }
+
         private void SetBackupButtonsEnabled(bool enabled)
         {
             RestoreBackupButton.IsEnabled = enabled;
             DeleteBackupButton.IsEnabled = enabled;
+        }
+
+        private void SetUpdateInProgress(bool inProgress)
+        {
+            _updateInProgress = inProgress;
+            FolderPathTextBox.IsEnabled = !inProgress;
+            BrowseButton.IsEnabled = !inProgress;
+            DlssSectionCard.IsEnabled = !inProgress;
+            DlssSectionCard.Opacity = inProgress ? 0.65 : 1.0;
+            BackupSectionCard.IsEnabled = !inProgress;
+            BackupSectionCard.Opacity = inProgress ? 0.65 : 1.0;
+            OverwriteToggle.IsEnabled = !inProgress &&
+                !string.IsNullOrWhiteSpace(_scannedFolderPath);
+
+            bool hasFiles =
+                _dlssFiles.Count + _dlssdFiles.Count + _dlssgFiles.Count > 0;
+            ShowDetailsButton.IsEnabled = !inProgress &&
+                (hasFiles || _scanWarningPaths.Count > 0);
+            SetBackupButtonsEnabled(!inProgress && _backupFiles.Count > 0);
         }
 
         private void UpdateBackupResult(
@@ -566,7 +663,7 @@ namespace dlss_updater
         {
             if (files.Count == 0)
             {
-                SetStatus(BackupStatusText, "!  Backup not found", NeutralStatusBrush);
+                SetStatus(BackupStatusText, "No backups detected", NeutralStatusBrush);
                 SetBackupButtonsEnabled(false);
                 return;
             }
@@ -646,26 +743,57 @@ namespace dlss_updater
         private void SetSearchingState()
         {
             SetStatus(DlssStatusText, "Searching...", NeutralStatusBrush);
-            ShowDetailsButton.Visibility = Visibility.Collapsed;
+            ShowDetailsButton.Content = "Show details";
+            ShowDetailsButton.IsEnabled = false;
+            ShowDetailsButton.Visibility = Visibility.Visible;
         }
 
         private void UpdateDlssSummary()
         {
             int fileCount =
                 _dlssFiles.Count + _dlssdFiles.Count + _dlssgFiles.Count;
+            int warningCount = _scanWarningPaths.Count;
 
             if (fileCount == 0)
             {
-                SetStatus(DlssStatusText, "No DLSS files found", NeutralStatusBrush);
-                ShowDetailsButton.Visibility = Visibility.Collapsed;
+                if (warningCount == 0)
+                {
+                    SetStatus(DlssStatusText, "No DLSS files found", NeutralStatusBrush);
+                }
+                else
+                {
+                    SetStatus(
+                        DlssStatusText,
+                        "Scan incomplete · " + warningCount +
+                        " folder" + (warningCount == 1 ? "" : "s") +
+                        " could not be checked",
+                        WarningStatusBrush);
+                }
+
+                ShowDetailsButton.Content = warningCount > 0
+                    ? "Review warnings"
+                    : "Show details";
+                ShowDetailsButton.IsEnabled = warningCount > 0;
+                ShowDetailsButton.Visibility = Visibility.Visible;
                 return;
+            }
+
+            string summary =
+                "Found " + fileCount + " DLSS file" +
+                (fileCount == 1 ? string.Empty : "s");
+
+            if (warningCount > 0)
+            {
+                summary += " · " + warningCount + " scan warning" +
+                    (warningCount == 1 ? string.Empty : "s");
             }
 
             SetStatus(
                 DlssStatusText,
-                "Found " + fileCount + " DLSS file" +
-                (fileCount == 1 ? string.Empty : "s"),
-                SuccessStatusBrush);
+                summary,
+                warningCount > 0 ? WarningStatusBrush : SuccessStatusBrush);
+            ShowDetailsButton.Content = "Show details";
+            ShowDetailsButton.IsEnabled = true;
             ShowDetailsButton.Visibility = Visibility.Visible;
         }
 
@@ -681,10 +809,33 @@ namespace dlss_updater
         private void PopulateDlssDetails(string folderPath)
         {
             DetailsFileListPanel.Children.Clear();
-            DetailsSummaryText.Text =
-                "Found " +
-                (_dlssFiles.Count + _dlssdFiles.Count + _dlssgFiles.Count) +
-                " supported file(s) in the selected folder and its subfolders.";
+            DetailsWarningListPanel.Children.Clear();
+
+            int fileCount =
+                _dlssFiles.Count + _dlssdFiles.Count + _dlssgFiles.Count;
+
+            DetailsSummaryText.Text = _scanWarningPaths.Count == 0
+                ? "Found " + fileCount +
+                  " supported file(s) in the selected folder and its subfolders."
+                : "Found " + fileCount +
+                  " supported file(s). Some folders could not be fully scanned, so results may be incomplete.";
+
+            DetailsWarningsCard.Visibility = _scanWarningPaths.Count > 0
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+
+            foreach (string warningPath in _scanWarningPaths)
+            {
+                DetailsWarningListPanel.Children.Add(
+                    new TextBlock
+                    {
+                        Text = GetDisplayPath(folderPath, warningPath),
+                        Foreground = WarningStatusBrush,
+                        FontSize = 13,
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 3, 0, 3)
+                    });
+            }
 
             AddDlssDetailRows("DLSS", folderPath, _dlssFiles);
             AddDlssDetailRows("DLSS-D", folderPath, _dlssdFiles);
@@ -927,10 +1078,15 @@ namespace dlss_updater
             _dlssFiles.Clear();
             _dlssdFiles.Clear();
             _dlssgFiles.Clear();
+            _scanWarningPaths.Clear();
 
             DetailsFileListPanel.Children.Clear();
+            DetailsWarningListPanel.Children.Clear();
+            DetailsWarningsCard.Visibility = Visibility.Collapsed;
             DetailsSummaryText.Text = string.Empty;
-            ShowDetailsButton.Visibility = Visibility.Collapsed;
+            ShowDetailsButton.Content = "Show details";
+            ShowDetailsButton.IsEnabled = false;
+            ShowDetailsButton.Visibility = Visibility.Visible;
 
             DlssFileListPanel.Children.Clear();
             DlssdFileListPanel.Children.Clear();

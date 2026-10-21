@@ -655,7 +655,7 @@
                         BorderBrush="#E5E5E5"
                         BorderThickness="0,0,0,1">
 
-                    <TextBlock Text="Game folder"
+                    <TextBlock Text="Folder to scan"
                                Style="{StaticResource SectionTitle}"
                                Margin="18,0"/>
 
@@ -682,7 +682,8 @@
                              TextChanged="FolderPathTextBox_TextChanged"/>
 
 
-                    <Button Grid.Column="1"
+                    <Button x:Name="BrowseButton"
+                            Grid.Column="1"
                             Content="Browse"
                             Height="37"
                             MinWidth="88"
@@ -720,7 +721,7 @@
                         BorderBrush="#E5E5E5"
                         BorderThickness="0,0,0,1">
 
-                    <TextBlock Text="DLSS files"
+                    <TextBlock Text="Scan results"
                                Style="{StaticResource SectionTitle}"
                                Margin="18,0"/>
 
@@ -744,7 +745,7 @@
                             Grid.Column="1"
                             Content="Show details"
                             Margin="0,0,18,0"
-                            Visibility="Collapsed"
+                            IsEnabled="False"
                             Click="ShowDetailsButton_Click"/>
                 </Grid>
 
@@ -1079,15 +1080,15 @@
                                 VerticalAlignment="Center">
 
                         <Button x:Name="RestoreBackupButton"
-                                Content="Restore backup"
-                                MinWidth="125"
+                                Content="Restore backups"
+                                MinWidth="135"
                                 Padding="16,0"
                                 IsEnabled="False"
                                 Click="RestoreBackupButton_Click"/>
 
                         <Button x:Name="DeleteBackupButton"
-                                Content="Delete backup"
-                                MinWidth="115"
+                                Content="Delete backups"
+                                MinWidth="130"
                                 Padding="16,0"
                                 Margin="8,0,0,0"
                                 IsEnabled="False"
@@ -1164,13 +1165,28 @@
 
         
 
+        <StackPanel x:Name="UpdateProgressPanel"
+                    Margin="0,20,0,0"
+                    Visibility="Hidden">
+            <TextBlock x:Name="UpdateProgressText"
+                       Text="Preparing update…"
+                       FontSize="13"
+                       Foreground="#666666"/>
+            <ProgressBar x:Name="UpdateProgressBar"
+                         Height="4"
+                         Margin="0,8,0,0"
+                         IsIndeterminate="True"
+                         Foreground="#1683D8"
+                         Background="#E5E5E5"/>
+        </StackPanel>
+
         <Button x:Name="UpdateButton"
                 Content="Update"
                 Style="{StaticResource PrimaryButton}"
                 IsEnabled="False"
                 Opacity="0.5"
                 HorizontalAlignment="Right"
-                Margin="0,20,0,0"
+                Margin="0,12,0,0"
                 Click="UpdateButton_Click"/>
 
 
@@ -1194,7 +1210,7 @@
                         Margin="0,0,16,0"
                         Click="BackFromDetailsButton_Click"/>
                 <TextBlock Grid.Column="1"
-                           Text="DLSS file details"
+                           Text="Scan details"
                            Style="{StaticResource SectionTitle}"
                            VerticalAlignment="Center"/>
             </Grid>
@@ -1204,6 +1220,29 @@
                 <TextBlock x:Name="DetailsSummaryText"
                            Foreground="#666666"
                            Margin="0,0,0,12"/>
+                <Border x:Name="DetailsWarningsCard"
+                        Style="{StaticResource Card}"
+                        Background="#FFF9E8"
+                        BorderBrush="#F1D28A"
+                        Padding="14"
+                        Margin="0,0,0,12"
+                        Visibility="Collapsed">
+                    <StackPanel>
+                        <TextBlock Text="Some folders could not be fully scanned"
+                                   FontWeight="SemiBold"
+                                   Foreground="#9C6500"
+                                   Margin="0,0,0,4"/>
+                        <TextBlock Text="Results may be incomplete. Check that these folders are available, then scan again."
+                                   Foreground="#666666"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,6"/>
+                        <ScrollViewer MaxHeight="120"
+                                      VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel x:Name="DetailsWarningListPanel"/>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
                 <Border Style="{StaticResource Card}"
                         Padding="14">
                     <Grid>
