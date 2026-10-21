@@ -2,7 +2,7 @@
 
 A simple desktop tool for finding and updating NVIDIA DLSS files in your game folders, rebuilt in C# for Windows.
 
-The C#/.NET Framework version keeps the executable lightweight at around 60 KB, compared with around 10 MB for the Python build.
+The C#/.NET Framework version keeps the executable lightweight at around 140 KB, compared with around 10 MB for the Python build.
 
 ![Release](https://img.shields.io/github/v/release/sparepillowgit/dlss-updater-dotnet)
 ![Last commit](https://img.shields.io/github/last-commit/sparepillowgit/dlss-updater-dotnet)
