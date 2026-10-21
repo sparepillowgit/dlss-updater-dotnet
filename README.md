@@ -54,7 +54,7 @@ https://github.com/sparepillowgit/dlss-updater-dotnet/releases/latest
 ## Usage
 
 1. Launch the application
-2. Enter or paste a game folder, or click **Browse** to select one
+2. Enter or paste a folder, or click **Browse** to select one
 3. Wait for the folder scan to finish
 4. Click **Update** to update supported DLSS files
 
