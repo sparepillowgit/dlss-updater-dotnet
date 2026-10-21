@@ -11,6 +11,8 @@ namespace dlss_updater.Services
 
         public int AlreadyCurrentFiles { get; set; }
 
+        public List<string> SkippedFiles { get; } = new List<string>();
+
         public List<string> Errors { get; } = new List<string>();
 
         public string GetSummary()
@@ -18,6 +20,12 @@ namespace dlss_updater.Services
             string summary =
                 "Updated " + UpdatedFiles + " file(s). " +
                 AlreadyCurrentFiles + " file(s) were already current.";
+
+            if (SkippedFiles.Count > 0)
+            {
+                summary += " " + SkippedFiles.Count +
+                    " file(s) skipped for version compatibility.";
+            }
 
             if (Errors.Count > 0)
             {
@@ -90,7 +98,7 @@ namespace dlss_updater.Services
 
                 if (!AreVersionsCompatible(installedVersion, latestVersion))
                 {
-                    result.Errors.Add(
+                    result.SkippedFiles.Add(
                         "Skipped " + fileName + ": updating from " +
                         installedVersion + " to " + latestVersion +
                         " crosses an unsupported major version boundary.");

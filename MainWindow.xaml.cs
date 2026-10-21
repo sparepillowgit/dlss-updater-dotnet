@@ -15,11 +15,11 @@ namespace dlss_updater
     public partial class MainWindow : Window
     {
         private static readonly SolidColorBrush NeutralStatusBrush =
-            new SolidColorBrush(Color.FromRgb(102, 102, 102));
+            new SolidColorBrush(Color.FromRgb(164, 174, 162));
         private static readonly SolidColorBrush SuccessStatusBrush =
-            new SolidColorBrush(Color.FromRgb(46, 125, 50));
+            new SolidColorBrush(Color.FromRgb(118, 185, 0));
         private static readonly SolidColorBrush WarningStatusBrush =
-            new SolidColorBrush(Color.FromRgb(156, 101, 0));
+            new SolidColorBrush(Color.FromRgb(230, 184, 74));
 
         private List<ScannedFile> _dlssFiles =
             new List<ScannedFile>();
@@ -420,14 +420,11 @@ namespace dlss_updater
                     PopulateDlssDetails(folder);
                     UpdateBackupResult(_backupFiles);
 
-                    MessageBox.Show(
-                        this,
+                    ShowOperationResult(
                         result.GetSummary(),
+                        result.Errors,
                         "DLSS Updater",
-                        MessageBoxButton.OK,
-                        result.Errors.Count == 0
-                            ? MessageBoxImage.Information
-                            : MessageBoxImage.Warning);
+                        result.SkippedFiles);
                 });
             }
             catch (Exception ex)
@@ -479,14 +476,10 @@ namespace dlss_updater
 
                 await RefreshScannedFilesAsync(FolderPathTextBox.Text);
 
-                InvokeOnUiThread(() => MessageBox.Show(
-                    this,
+                InvokeOnUiThread(() => ShowOperationResult(
                     result.GetSummary(true),
-                    "Restore backup",
-                    MessageBoxButton.OK,
-                    result.Errors.Count == 0
-                        ? MessageBoxImage.Information
-                        : MessageBoxImage.Warning));
+                    result.Errors,
+                    "Restore backups"));
             }
             catch (Exception ex)
             {
@@ -538,14 +531,10 @@ namespace dlss_updater
                     UpdateDlssSummary();
                     PopulateDlssDetails(folder);
                     UpdateBackupResult(_backupFiles);
-                    MessageBox.Show(
-                        this,
+                    ShowOperationResult(
                         result.GetSummary(false),
-                        "Delete backups",
-                        MessageBoxButton.OK,
-                        result.Errors.Count == 0
-                            ? MessageBoxImage.Information
-                            : MessageBoxImage.Warning);
+                        result.Errors,
+                        "Delete backups");
                 });
             }
             catch (Exception ex)
@@ -612,6 +601,147 @@ namespace dlss_updater
             }
 
             Dispatcher.Invoke(action);
+        }
+
+        private void ShowOperationResult(
+            string summary,
+            IList<string> errors,
+            string title,
+            IList<string> additionalDetails = null)
+        {
+            int errorCount = errors == null ? 0 : errors.Count;
+            int additionalDetailCount =
+                additionalDetails == null ? 0 : additionalDetails.Count;
+
+            if (errorCount == 0 && additionalDetailCount == 0)
+            {
+                MessageBox.Show(
+                    this,
+                    summary,
+                    title,
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            int summaryBreak = summary.IndexOf(Environment.NewLine, StringComparison.Ordinal);
+            string shortSummary = summaryBreak < 0
+                ? summary
+                : summary.Substring(0, summaryBreak);
+
+            Window dialog = new Window
+            {
+                Title = title,
+                Owner = this,
+                Width = 540,
+                SizeToContent = SizeToContent.Height,
+                MinWidth = 440,
+                MinHeight = 220,
+                MaxHeight = 520,
+                ResizeMode = ResizeMode.CanResizeWithGrip,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Background = new SolidColorBrush(Color.FromRgb(32, 36, 32))
+            };
+
+            StackPanel content = new StackPanel
+            {
+                Margin = new Thickness(22)
+            };
+
+            content.Children.Add(new TextBlock
+            {
+                Text = errorCount > 0 ? "Completed with errors" : "Update results",
+                FontSize = 18,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = errorCount > 0 ? WarningStatusBrush : SuccessStatusBrush,
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+
+            content.Children.Add(new TextBlock
+            {
+                Text = shortSummary,
+                FontSize = 13,
+                Foreground = NeutralStatusBrush,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 12)
+            });
+
+            StackPanel errorList = new StackPanel();
+            if (errors != null)
+            {
+                foreach (string error in errors)
+                {
+                    errorList.Children.Add(new TextBlock
+                    {
+                        Text = "•  " + error,
+                        FontSize = 12,
+                        Foreground = NeutralStatusBrush,
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 0, 0, 8)
+                    });
+                }
+            }
+
+            if (additionalDetails != null)
+            {
+                foreach (string detail in additionalDetails)
+                {
+                    errorList.Children.Add(new TextBlock
+                    {
+                        Text = "•  " + detail,
+                        FontSize = 12,
+                        Foreground = NeutralStatusBrush,
+                        TextWrapping = TextWrapping.Wrap,
+                        Margin = new Thickness(0, 0, 0, 8)
+                    });
+                }
+            }
+
+            ScrollViewer errorScrollViewer = new ScrollViewer
+            {
+                Content = errorList,
+                MaxHeight = 170,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+            };
+
+            Border errorDetailsCard = new Border
+            {
+                Child = errorScrollViewer,
+                Background = new SolidColorBrush(Color.FromRgb(28, 33, 28)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(52, 59, 52)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(9),
+                Margin = new Thickness(24, 8, 0, 0)
+            };
+
+            content.Children.Add(new Expander
+            {
+                Header = "Show details (" +
+                    (errorCount + additionalDetailCount) + ")",
+                Content = errorDetailsCard,
+                Foreground = NeutralStatusBrush,
+                Margin = new Thickness(0, 0, 0, 16)
+            });
+
+            Button closeButton = new Button
+            {
+                Content = "Close",
+                MinWidth = 84,
+                Padding = new Thickness(16, 6, 16, 6),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                Background = new SolidColorBrush(Color.FromRgb(42, 48, 42)),
+                Foreground = new SolidColorBrush(Color.FromRgb(232, 237, 232)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(70, 80, 70)),
+                IsDefault = true,
+                IsCancel = true
+            };
+            closeButton.Click += (sender, args) => dialog.Close();
+            content.Children.Add(closeButton);
+
+            dialog.Content = content;
+            dialog.ShowDialog();
         }
 
         private List<string> MergeScanWarningPaths(
@@ -865,7 +995,7 @@ namespace dlss_updater
                 Border separator = new Border
                 {
                     Height = 1,
-                    Background = new SolidColorBrush(Color.FromRgb(229, 229, 229))
+                    Background = new SolidColorBrush(Color.FromRgb(52, 59, 52))
                 };
                 DetailsFileListPanel.Children.Add(separator);
             }
@@ -881,7 +1011,7 @@ namespace dlss_updater
             {
                 Text = text,
                 FontSize = 13,
-                Foreground = new SolidColorBrush(Color.FromRgb(102, 102, 102)),
+                Foreground = new SolidColorBrush(Color.FromRgb(164, 174, 162)),
                 TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
                 Margin = new Thickness(0, 0, 8, 0)
             };
@@ -983,9 +1113,9 @@ namespace dlss_updater
                 versionText.Foreground =
                     new SolidColorBrush(
                         Color.FromRgb(
-                            102,
-                            102,
-                            102));
+                            164,
+                            174,
+                            162));
 
                 versionText.VerticalAlignment =
                     VerticalAlignment.Top;
@@ -1003,9 +1133,9 @@ namespace dlss_updater
                 pathText.Foreground =
                     new SolidColorBrush(
                         Color.FromRgb(
-                            102,
-                            102,
-                            102));
+                            164,
+                            174,
+                            162));
 
                 pathText.TextWrapping =
                     TextWrapping.Wrap;
