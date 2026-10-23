@@ -47,6 +47,12 @@ namespace dlss_updater.Services
             "https://github.com/sparepillowgit/dlss-updater-files/releases/latest/download/dlss_manifest.json";
         private const string LatestReleaseApiUrl =
             "https://api.github.com/repos/sparepillowgit/dlss-updater-files/releases/latest";
+        private const string LegacyDlssFileName = "nvngx_dlss.dll";
+        private const string LegacyDlssVersion = "1.3.2.0";
+        private const string LegacyDlssUrl =
+            "https://github.com/sparepillowgit/dlss-updater-files/releases/download/v1.3.2/nvngx_dlss.dll";
+        private const string LegacyDlssSha256 =
+            "53271884b0f3e89af0de27f6373d727101e61a711f3b6e3f9d0a775b32d278c0";
 
         private static readonly HttpClient HttpClient = CreateHttpClient();
 
@@ -134,6 +140,16 @@ namespace dlss_updater.Services
             }
 
             return manifest;
+        }
+
+        public static DlssReleaseAsset GetLegacyDlssAsset()
+        {
+            return new DlssReleaseAsset
+            {
+                Version = LegacyDlssVersion,
+                Url = LegacyDlssUrl,
+                Sha256 = LegacyDlssSha256
+            };
         }
 
         public static async Task<string> DownloadToTemporaryFileAsync(
@@ -236,7 +252,11 @@ namespace dlss_updater.Services
                     File.Move(stagingPath, cachePath);
                 }
 
-                RemoveOlderCachedVersions(cacheDirectory, fileName, cachePath);
+                if (!IsLegacyDlss(fileName, version))
+                {
+                    RemoveOlderCachedVersions(cacheDirectory, fileName, cachePath);
+                }
+
                 return cachePath;
             }
             finally
@@ -366,9 +386,13 @@ namespace dlss_updater.Services
                     fileName + ".*.cache"))
                 {
                     if (!string.Equals(
-                        path,
-                        currentCachePath,
-                        StringComparison.OrdinalIgnoreCase))
+                            path,
+                            currentCachePath,
+                            StringComparison.OrdinalIgnoreCase) &&
+                        !string.Equals(
+                            path,
+                            GetCachedFilePath(LegacyDlssFileName, LegacyDlssVersion),
+                            StringComparison.OrdinalIgnoreCase))
                     {
                         try
                         {
@@ -383,6 +407,12 @@ namespace dlss_updater.Services
             catch
             {
             }
+        }
+
+        private static bool IsLegacyDlss(string fileName, string version)
+        {
+            return string.Equals(fileName, LegacyDlssFileName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(version, LegacyDlssVersion, StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsSupportedDll(string fileName)

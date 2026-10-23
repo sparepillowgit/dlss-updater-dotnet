@@ -82,8 +82,19 @@ namespace dlss_updater.Services
                 Version installedVersion;
                 Version latestVersion;
 
-                if (!Version.TryParse(installedFile.Version, out installedVersion) ||
-                    !Version.TryParse(releaseAsset.Version, out latestVersion))
+                if (!Version.TryParse(installedFile.Version, out installedVersion))
+                {
+                    result.Errors.Add(
+                        "Could not compare the version for " + installedFile.Path + ".");
+                    continue;
+                }
+
+                if (IsLegacyDlss(fileName, installedVersion))
+                {
+                    releaseAsset = DlssReleaseClient.GetLegacyDlssAsset();
+                }
+
+                if (!Version.TryParse(releaseAsset.Version, out latestVersion))
                 {
                     result.Errors.Add(
                         "Could not compare the version for " + installedFile.Path + ".");
@@ -106,8 +117,9 @@ namespace dlss_updater.Services
                 }
 
                 string downloadedPath;
+                string downloadKey = fileName + "|" + latestVersion;
 
-                if (!downloadedFiles.TryGetValue(fileName, out downloadedPath))
+                if (!downloadedFiles.TryGetValue(downloadKey, out downloadedPath))
                 {
                     if (DlssReleaseClient.TryGetCachedFile(
                         fileName,
@@ -137,7 +149,7 @@ namespace dlss_updater.Services
                         }
                     }
 
-                    downloadedFiles[fileName] = downloadedPath;
+                    downloadedFiles[downloadKey] = downloadedPath;
                 }
 
                 try
@@ -186,6 +198,15 @@ namespace dlss_updater.Services
 
             return (installedMajor == 2 || installedMajor == 3) &&
                 (latestMajor == 2 || latestMajor == 3);
+        }
+
+        private static bool IsLegacyDlss(string fileName, Version installedVersion)
+        {
+            return string.Equals(
+                    fileName,
+                    "nvngx_dlss.dll",
+                    StringComparison.OrdinalIgnoreCase) &&
+                GetDlssCompatibilityMajor(installedVersion.Major) == 1;
         }
 
         private static int NormalizeFrameGenerationMajor(int major)
