@@ -96,7 +96,7 @@ namespace dlss_updater.Services
                     continue;
                 }
 
-                if (!AreVersionsCompatible(installedVersion, latestVersion))
+                if (!AreVersionsCompatible(fileName, installedVersion, latestVersion))
                 {
                     result.SkippedFiles.Add(
                         "Skipped " + fileName + ": updating from " +
@@ -163,11 +163,21 @@ namespace dlss_updater.Services
         }
 
         private static bool AreVersionsCompatible(
+            string fileName,
             Version installedVersion,
             Version latestVersion)
         {
             int installedMajor = GetDlssCompatibilityMajor(installedVersion.Major);
             int latestMajor = GetDlssCompatibilityMajor(latestVersion.Major);
+
+            if (string.Equals(
+                fileName,
+                "nvngx_dlssg.dll",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                installedMajor = NormalizeFrameGenerationMajor(installedMajor);
+                latestMajor = NormalizeFrameGenerationMajor(latestMajor);
+            }
 
             if (installedMajor == latestMajor)
             {
@@ -176,6 +186,11 @@ namespace dlss_updater.Services
 
             return (installedMajor == 2 || installedMajor == 3) &&
                 (latestMajor == 2 || latestMajor == 3);
+        }
+
+        private static int NormalizeFrameGenerationMajor(int major)
+        {
+            return major == 1 ? 3 : major;
         }
 
         private static int GetDlssCompatibilityMajor(int fileVersionMajor)
