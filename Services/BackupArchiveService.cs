@@ -92,7 +92,7 @@ namespace dlss_updater.Services
 
             if (backups == null)
             {
-                result.Errors.Add("No backups were selected.");
+                result.Errors.Add(Translator.T("NoBackupsSelected"));
                 return result;
             }
 
@@ -103,14 +103,14 @@ namespace dlss_updater.Services
 
                 if (!match.Success)
                 {
-                    result.Errors.Add("Unrecognized backup file: " + backup.Path);
+                    result.Errors.Add(Translator.T("UnrecognizedBackup", backup.Path));
                     continue;
                 }
 
                 Version candidateVersion;
                 if (!Version.TryParse(match.Groups["version"].Value, out candidateVersion))
                 {
-                    result.Errors.Add("Could not read the backup version: " + backup.Path);
+                    result.Errors.Add(Translator.T("UnreadableBackupVersion", backup.Path));
                     continue;
                 }
 
@@ -150,14 +150,17 @@ namespace dlss_updater.Services
                     catch (Exception ex)
                     {
                         result.Errors.Add(
-                            "Restored " + item.Key + " but could not delete its backup " +
-                            item.Value.Path + ": " + ex.Message);
+                            Translator.T(
+                                "RestoredButNotDeleted",
+                                item.Key,
+                                item.Value.Path,
+                                ex.Message));
                     }
                 }
                 catch (Exception ex)
                 {
                     result.Errors.Add(
-                        "Could not restore " + item.Key + ": " + ex.Message);
+                        Translator.T("CouldNotRestore", item.Key, ex.Message));
                 }
             }
 
@@ -171,7 +174,7 @@ namespace dlss_updater.Services
 
             if (backups == null)
             {
-                result.Errors.Add("No backups were selected.");
+                result.Errors.Add(Translator.T("NoBackupsSelected"));
                 return result;
             }
 
@@ -185,7 +188,7 @@ namespace dlss_updater.Services
                 catch (Exception ex)
                 {
                     result.Errors.Add(
-                        "Could not delete " + backup.Path + ": " + ex.Message);
+                        Translator.T("CouldNotDelete", backup.Path, ex.Message));
                 }
             }
 
@@ -220,7 +223,7 @@ namespace dlss_updater.Services
                             if (entry != null)
                             {
                                 throw new InvalidDataException(
-                                    "The backup contains duplicate DLL entries.");
+                                    Translator.T("DuplicateBackupEntries"));
                             }
                             entry = archiveEntry;
                         }
@@ -229,7 +232,7 @@ namespace dlss_updater.Services
                     if (entry == null)
                     {
                         throw new InvalidDataException(
-                            "The backup does not contain " + expectedFileName + ".");
+                            Translator.T("BackupMissingFile", expectedFileName));
                     }
 
                     using (Stream source = entry.Open())
@@ -274,8 +277,8 @@ namespace dlss_updater.Services
         public string GetSummary(bool restoring)
         {
             string summary = restoring
-                ? "Restored " + RestoredFiles + " file(s)."
-                : "Deleted " + DeletedFiles + " backup file(s).";
+                ? Translator.T("RestoreSummary", RestoredFiles)
+                : Translator.T("DeleteSummary", DeletedFiles);
 
             if (Errors.Count > 0)
             {

@@ -125,7 +125,7 @@ namespace dlss_updater.Services
                 if (!IsSha256(item.Value.Sha256))
                 {
                     throw new InvalidDataException(
-                        "GitHub did not provide a SHA-256 digest for " + item.Key + ".");
+                        Translator.T("MissingDigest", item.Key));
                 }
 
                 item.Value.Sha256 = item.Value.Sha256.ToLowerInvariant();
@@ -136,7 +136,7 @@ namespace dlss_updater.Services
             if (manifest.Count == 0)
             {
                 throw new InvalidDataException(
-                    "The release manifest did not contain any supported DLSS files.");
+                    Translator.T("EmptyManifest"));
             }
 
             return manifest;
@@ -238,7 +238,7 @@ namespace dlss_updater.Services
                 if (!FileMatchesSha256(downloadedPath, expectedSha256))
                 {
                     throw new InvalidDataException(
-                        "The SHA-256 check failed for " + fileName + ". The download was discarded.");
+                        Translator.T("ShaMismatch", fileName));
                 }
 
                 File.Copy(downloadedPath, stagingPath, false);

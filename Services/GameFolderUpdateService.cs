@@ -18,13 +18,11 @@ namespace dlss_updater.Services
         public string GetSummary()
         {
             string summary =
-                "Updated " + UpdatedFiles + " file(s). " +
-                AlreadyCurrentFiles + " file(s) were already current.";
+                Translator.T("UpdateSummary", UpdatedFiles, AlreadyCurrentFiles);
 
             if (SkippedFiles.Count > 0)
             {
-                summary += " " + SkippedFiles.Count +
-                    " file(s) skipped for version compatibility.";
+                summary += Translator.T("UpdateSkippedSummary", SkippedFiles.Count);
             }
 
             if (Errors.Count > 0)
@@ -50,7 +48,7 @@ namespace dlss_updater.Services
             if (installedFiles == null || installedFiles.Count == 0)
             {
                 result.Errors.Add(
-                    "No supported DLSS files were found in the selected folder.");
+                    Translator.T("NoSupportedFiles"));
                 return result;
             }
 
@@ -67,15 +65,14 @@ namespace dlss_updater.Services
                 fileIndex++;
                 string fileName = Path.GetFileName(installedFile.Path);
                 progress?.Report(
-                    "Checking " + fileName + " (" + fileIndex +
-                    " of " + installedFiles.Count + ")…");
+                    Translator.T("CheckingFile", fileName, fileIndex, installedFiles.Count));
 
                 DlssReleaseAsset releaseAsset;
 
                 if (!manifest.TryGetValue(fileName, out releaseAsset))
                 {
                     result.Errors.Add(
-                        "No release entry was found for " + fileName + ".");
+                        Translator.T("NoReleaseEntry", fileName));
                     continue;
                 }
 
@@ -85,7 +82,7 @@ namespace dlss_updater.Services
                 if (!Version.TryParse(installedFile.Version, out installedVersion))
                 {
                     result.Errors.Add(
-                        "Could not compare the version for " + installedFile.Path + ".");
+                        Translator.T("CouldNotCompareVersion", installedFile.Path));
                     continue;
                 }
 
@@ -97,7 +94,7 @@ namespace dlss_updater.Services
                 if (!Version.TryParse(releaseAsset.Version, out latestVersion))
                 {
                     result.Errors.Add(
-                        "Could not compare the version for " + installedFile.Path + ".");
+                        Translator.T("CouldNotCompareVersion", installedFile.Path));
                     continue;
                 }
 
@@ -110,9 +107,11 @@ namespace dlss_updater.Services
                 if (!AreVersionsCompatible(fileName, installedVersion, latestVersion))
                 {
                     result.SkippedFiles.Add(
-                        "Skipped " + fileName + ": updating from " +
-                        installedVersion + " to " + latestVersion +
-                        " crosses an unsupported major version boundary.");
+                        Translator.T(
+                            "SkippedMajorVersion",
+                            fileName,
+                            installedVersion,
+                            latestVersion));
                     continue;
                 }
 
@@ -127,13 +126,13 @@ namespace dlss_updater.Services
                         releaseAsset.Sha256,
                         out downloadedPath))
                     {
-                        progress?.Report("Using cached " + fileName + "…");
+                        progress?.Report(Translator.T("UsingCached", fileName));
                     }
                     else
                     {
                         try
                         {
-                            progress?.Report("Downloading " + fileName + "…");
+                            progress?.Report(Translator.T("Downloading", fileName));
                             downloadedPath =
                                 await DlssReleaseClient.DownloadToCacheAsync(
                                     releaseAsset.Url,
@@ -144,7 +143,7 @@ namespace dlss_updater.Services
                         catch (Exception ex)
                         {
                             result.Errors.Add(
-                                "Could not download " + fileName + ": " + ex.Message);
+                                Translator.T("CouldNotDownload", fileName, ex.Message));
                             continue;
                         }
                     }
@@ -154,7 +153,7 @@ namespace dlss_updater.Services
 
                 try
                 {
-                    progress?.Report("Updating " + fileName + "…");
+                    progress?.Report(Translator.T("UpdatingFile", fileName));
                     BackupArchiveService.CreateBackup(
                         installedFile.Path,
                         installedVersion.ToString(),
@@ -167,7 +166,7 @@ namespace dlss_updater.Services
                 catch (Exception ex)
                 {
                     result.Errors.Add(
-                        "Could not update " + installedFile.Path + ": " + ex.Message);
+                        Translator.T("CouldNotUpdate", installedFile.Path, ex.Message));
                 }
             }
 
@@ -224,7 +223,7 @@ namespace dlss_updater.Services
         private static async Task<Dictionary<string, DlssReleaseAsset>>
             GetLatestManifestAsync(IProgress<string> progress)
         {
-            progress?.Report("Checking for the latest DLSS versions…");
+            progress?.Report(Translator.T("CheckingLatest"));
             return await DlssReleaseClient.GetLatestManifestAsync();
         }
 

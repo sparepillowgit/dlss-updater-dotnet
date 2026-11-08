@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Markup;
 using System.Windows.Input;
 using System.Windows.Media;
 using dlss_updater.Services;
@@ -41,10 +42,57 @@ namespace dlss_updater
         private int _folderScanGeneration;
         private bool _suppressFolderPathChange;
         private bool _updateInProgress;
+        private readonly Dictionary<object, Action> _localizedSetters =
+            new Dictionary<object, Action>();
 
         public MainWindow()
         {
             InitializeComponent();
+
+            LanguagePicker.ItemsSource = Translator.Languages;
+            LanguagePicker.SelectedValue = Translator.Instance.Language;
+            Language = XmlLanguage.GetLanguage(Translator.Instance.Language);
+            Translator.Instance.LanguageChanged += Localization_LanguageChanged;
+            Closed += (sender, e) =>
+                Translator.Instance.LanguageChanged -= Localization_LanguageChanged;
+        }
+
+        private void LanguagePicker_SelectionChanged(
+            object sender,
+            SelectionChangedEventArgs e)
+        {
+            string language = LanguagePicker.SelectedValue as string;
+            if (language != null)
+            {
+                Translator.Instance.Language = language;
+            }
+        }
+
+        private void Localization_LanguageChanged(
+            object sender,
+            EventArgs e)
+        {
+            Language = XmlLanguage.GetLanguage(Translator.Instance.Language);
+
+            foreach (Action apply in _localizedSetters.Values)
+            {
+                apply();
+            }
+        }
+
+        private void SetLocalized(
+            object target,
+            Action apply)
+        {
+            _localizedSetters[target] = apply;
+            apply();
+        }
+
+        private void SetButtonText(
+            Button button,
+            string key)
+        {
+            SetLocalized(button, () => button.Content = Translator.T(key));
         }
 
         private async void BrowseButton_Click(
@@ -130,7 +178,7 @@ namespace dlss_updater
                 return;
             }
 
-            SetStatus(DlssStatusText, "Waiting to validate folder...", NeutralStatusBrush);
+            SetStatus(DlssStatusText, () => Translator.T("WaitingToValidate"), NeutralStatusBrush);
 
             CancellationTokenSource debounce = new CancellationTokenSource();
             _folderPathDebounce = debounce;
@@ -181,8 +229,8 @@ namespace dlss_updater
             DlssSectionCard.Opacity = 0.5;
             BackupSectionCard.IsEnabled = false;
             BackupSectionCard.Opacity = 0.5;
-            SetStatus(DlssStatusText, string.Empty, NeutralStatusBrush);
-            SetStatus(BackupStatusText, string.Empty, NeutralStatusBrush);
+            SetStatus(DlssStatusText, () => string.Empty, NeutralStatusBrush);
+            SetStatus(BackupStatusText, () => string.Empty, NeutralStatusBrush);
 
             UpdateButton.IsEnabled = false;
             UpdateButton.Opacity = 0.5;
@@ -191,8 +239,8 @@ namespace dlss_updater
             DetailsFileListPanel.Children.Clear();
             DetailsWarningListPanel.Children.Clear();
             DetailsWarningsCard.Visibility = Visibility.Collapsed;
-            DetailsSummaryText.Text = string.Empty;
-            ShowDetailsButton.Content = "Show details";
+            SetLocalized(DetailsSummaryText, () => DetailsSummaryText.Text = string.Empty);
+            SetButtonText(ShowDetailsButton, "ShowDetails");
             ShowDetailsButton.IsEnabled = false;
             ShowDetailsButton.Visibility = Visibility.Visible;
         }
@@ -243,8 +291,8 @@ namespace dlss_updater
                 {
                     MessageBox.Show(
                         this,
-                        "Please enter or select a valid directory.",
-                        "Directory Not Supported",
+                        Translator.T("InvalidDirectory"),
+                        Translator.T("DirectoryNotSupported"),
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);
                 }
@@ -289,7 +337,7 @@ namespace dlss_updater
 
             ResetFileLists();
             SetSearchingState();
-            SetStatus(BackupStatusText, "Searching for backups...", NeutralStatusBrush);
+            SetStatus(BackupStatusText, () => Translator.T("SearchingBackups"), NeutralStatusBrush);
             RestoreBackupButton.IsEnabled = false;
             DeleteBackupButton.IsEnabled = false;
 
@@ -384,8 +432,8 @@ namespace dlss_updater
 
             SetUpdateInProgress(true);
             UpdateButton.IsEnabled = false;
-            UpdateButton.Content = "Updating...";
-            UpdateProgressText.Text = "Rescanning folder before update…";
+            SetButtonText(UpdateButton, "Updating");
+            UpdateProgressText.Text = Translator.T("RescanningBeforeUpdate");
             UpdateProgressPanel.Visibility = Visibility.Visible;
             IProgress<string> progress = new Progress<string>(message =>
                 UpdateProgressText.Text = message);
@@ -406,7 +454,7 @@ namespace dlss_updater
                         OverwriteToggle.IsChecked == true,
                         progress);
 
-                progress.Report("Refreshing scan results…");
+                progress.Report(Translator.T("RefreshingResults"));
                 List<string> backupWarnings = new List<string>();
                 _backupFiles = await Task.Run(() =>
                     BackupScanner.FindBackupFiles(folder, backupWarnings));
@@ -431,8 +479,8 @@ namespace dlss_updater
             {
                 InvokeOnUiThread(() => MessageBox.Show(
                     this,
-                    "The update could not be completed." + Environment.NewLine + ex.Message,
-                    "DLSS Updater Failed",
+                    Translator.T("UpdateFailedMessage") + Environment.NewLine + ex.Message,
+                    Translator.T("UpdateFailedTitle"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error));
             }
@@ -442,7 +490,7 @@ namespace dlss_updater
                 {
                     UpdateProgressPanel.Visibility = Visibility.Hidden;
                     SetUpdateInProgress(false);
-                    UpdateButton.Content = "Update";
+                    SetButtonText(UpdateButton, "Update");
                     bool hasDlssFiles =
                         _dlssFiles.Count + _dlssdFiles.Count + _dlssgFiles.Count > 0;
                     UpdateButton.IsEnabled = hasDlssFiles;
@@ -457,8 +505,8 @@ namespace dlss_updater
         {
             MessageBoxResult confirmation = MessageBox.Show(
                 this,
-                "Restore the newest backup for each DLSS file? This will replace the current files.",
-                "Restore backup",
+                Translator.T("RestoreConfirm"),
+                Translator.T("RestoreBackupTitle"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
 
@@ -479,14 +527,14 @@ namespace dlss_updater
                 InvokeOnUiThread(() => ShowOperationResult(
                     result.GetSummary(true),
                     result.Errors,
-                    "Restore backups"));
+                    Translator.T("RestoreBackups")));
             }
             catch (Exception ex)
             {
                 InvokeOnUiThread(() => MessageBox.Show(
                     this,
-                    "The backup could not be restored." + Environment.NewLine + ex.Message,
-                    "Restore backup failed",
+                    Translator.T("RestoreFailedMessage") + Environment.NewLine + ex.Message,
+                    Translator.T("RestoreFailedTitle"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error));
             }
@@ -502,8 +550,8 @@ namespace dlss_updater
         {
             MessageBoxResult confirmation = MessageBox.Show(
                 this,
-                "Delete all DLSS backup files found in the selected folder? This cannot be undone.",
-                "Delete backups",
+                Translator.T("DeleteConfirm"),
+                Translator.T("DeleteBackups"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
 
@@ -534,15 +582,15 @@ namespace dlss_updater
                     ShowOperationResult(
                         result.GetSummary(false),
                         result.Errors,
-                        "Delete backups");
+                        Translator.T("DeleteBackups"));
                 });
             }
             catch (Exception ex)
             {
                 InvokeOnUiThread(() => MessageBox.Show(
                     this,
-                    "The backups could not be deleted." + Environment.NewLine + ex.Message,
-                    "Delete backups failed",
+                    Translator.T("DeleteFailedMessage") + Environment.NewLine + ex.Message,
+                    Translator.T("DeleteFailedTitle"),
                     MessageBoxButton.OK,
                     MessageBoxImage.Error));
             }
@@ -650,7 +698,7 @@ namespace dlss_updater
 
             content.Children.Add(new TextBlock
             {
-                Text = errorCount > 0 ? "Completed with errors" : "Update results",
+                Text = Translator.T(errorCount > 0 ? "CompletedWithErrors" : "UpdateResults"),
                 FontSize = 18,
                 FontWeight = FontWeights.SemiBold,
                 Foreground = errorCount > 0 ? WarningStatusBrush : SuccessStatusBrush,
@@ -718,8 +766,9 @@ namespace dlss_updater
 
             content.Children.Add(new Expander
             {
-                Header = "Show details (" +
-                    (errorCount + additionalDetailCount) + ")",
+                Header = Translator.T(
+                    "ShowDetailsCount",
+                    errorCount + additionalDetailCount),
                 Content = errorDetailsCard,
                 Foreground = NeutralStatusBrush,
                 Margin = new Thickness(0, 0, 0, 16)
@@ -727,7 +776,7 @@ namespace dlss_updater
 
             Button closeButton = new Button
             {
-                Content = "Close",
+                Content = Translator.T("Close"),
                 MinWidth = 84,
                 Padding = new Thickness(16, 6, 16, 6),
                 HorizontalAlignment = HorizontalAlignment.Right,
@@ -786,6 +835,7 @@ namespace dlss_updater
             ShowDetailsButton.IsEnabled = !inProgress &&
                 (hasFiles || _scanWarningPaths.Count > 0);
             SetBackupButtonsEnabled(!inProgress && _backupFiles.Count > 0);
+            LanguagePicker.IsEnabled = !inProgress;
         }
 
         private void UpdateBackupResult(
@@ -793,23 +843,25 @@ namespace dlss_updater
         {
             if (files.Count == 0)
             {
-                SetStatus(BackupStatusText, "No backups detected", NeutralStatusBrush);
+                SetStatus(BackupStatusText, () => Translator.T("NoBackups"), NeutralStatusBrush);
                 SetBackupButtonsEnabled(false);
                 return;
             }
 
             if (files.Count == 1)
             {
+                string version = files[0].Version;
                 SetStatus(
                     BackupStatusText,
-                    "✓  Backup found (" + files[0].Version + ")",
+                    () => Translator.T("BackupFoundOne", version),
                     SuccessStatusBrush);
             }
             else
             {
+                int backupCount = files.Count;
                 SetStatus(
                     BackupStatusText,
-                    "✓  " + files.Count + " backups found",
+                    () => Translator.T("BackupsFoundMany", backupCount),
                     SuccessStatusBrush);
             }
 
@@ -872,8 +924,8 @@ namespace dlss_updater
 
         private void SetSearchingState()
         {
-            SetStatus(DlssStatusText, "Searching...", NeutralStatusBrush);
-            ShowDetailsButton.Content = "Show details";
+            SetStatus(DlssStatusText, () => Translator.T("Searching"), NeutralStatusBrush);
+            SetButtonText(ShowDetailsButton, "ShowDetails");
             ShowDetailsButton.IsEnabled = false;
             ShowDetailsButton.Visibility = Visibility.Visible;
         }
@@ -888,51 +940,57 @@ namespace dlss_updater
             {
                 if (warningCount == 0)
                 {
-                    SetStatus(DlssStatusText, "No DLSS files found", NeutralStatusBrush);
+                    SetStatus(DlssStatusText, () => Translator.T("NoDlssFiles"), NeutralStatusBrush);
                 }
                 else
                 {
                     SetStatus(
                         DlssStatusText,
-                        "Scan incomplete · " + warningCount +
-                        " folder" + (warningCount == 1 ? "" : "s") +
-                        " could not be checked",
+                        () => warningCount == 1
+                            ? Translator.T("ScanIncompleteOne")
+                            : Translator.T("ScanIncompleteMany", warningCount),
                         WarningStatusBrush);
                 }
 
-                ShowDetailsButton.Content = warningCount > 0
-                    ? "Review warnings"
-                    : "Show details";
+                SetButtonText(
+                    ShowDetailsButton,
+                    warningCount > 0 ? "ReviewWarnings" : "ShowDetails");
                 ShowDetailsButton.IsEnabled = warningCount > 0;
                 ShowDetailsButton.Visibility = Visibility.Visible;
                 return;
             }
 
-            string summary =
-                "Found " + fileCount + " DLSS file" +
-                (fileCount == 1 ? string.Empty : "s");
-
-            if (warningCount > 0)
-            {
-                summary += " · " + warningCount + " scan warning" +
-                    (warningCount == 1 ? string.Empty : "s");
-            }
-
             SetStatus(
                 DlssStatusText,
-                summary,
+                () =>
+                {
+                    string summary = fileCount == 1
+                        ? Translator.T("FoundFilesOne")
+                        : Translator.T("FoundFilesMany", fileCount);
+
+                    if (warningCount == 1)
+                    {
+                        summary += Translator.T("ScanWarningOne");
+                    }
+                    else if (warningCount > 1)
+                    {
+                        summary += Translator.T("ScanWarningsMany", warningCount);
+                    }
+
+                    return summary;
+                },
                 warningCount > 0 ? WarningStatusBrush : SuccessStatusBrush);
-            ShowDetailsButton.Content = "Show details";
+            SetButtonText(ShowDetailsButton, "ShowDetails");
             ShowDetailsButton.IsEnabled = true;
             ShowDetailsButton.Visibility = Visibility.Visible;
         }
 
         private void SetStatus(
             TextBlock statusText,
-            string message,
+            Func<string> message,
             Brush foreground)
         {
-            statusText.Text = message;
+            SetLocalized(statusText, () => statusText.Text = message());
             statusText.Foreground = foreground;
         }
 
@@ -944,11 +1002,12 @@ namespace dlss_updater
             int fileCount =
                 _dlssFiles.Count + _dlssdFiles.Count + _dlssgFiles.Count;
 
-            DetailsSummaryText.Text = _scanWarningPaths.Count == 0
-                ? "Found " + fileCount +
-                  " supported file(s) in the selected folder and its subfolders."
-                : "Found " + fileCount +
-                  " supported file(s). Some folders could not be fully scanned, so results may be incomplete.";
+            bool incomplete = _scanWarningPaths.Count > 0;
+            SetLocalized(
+                DetailsSummaryText,
+                () => DetailsSummaryText.Text = Translator.T(
+                    incomplete ? "DetailsSummaryIncomplete" : "DetailsSummary",
+                    fileCount));
 
             DetailsWarningsCard.Visibility = _scanWarningPaths.Count > 0
                 ? Visibility.Visible
@@ -1213,8 +1272,8 @@ namespace dlss_updater
             DetailsFileListPanel.Children.Clear();
             DetailsWarningListPanel.Children.Clear();
             DetailsWarningsCard.Visibility = Visibility.Collapsed;
-            DetailsSummaryText.Text = string.Empty;
-            ShowDetailsButton.Content = "Show details";
+            SetLocalized(DetailsSummaryText, () => DetailsSummaryText.Text = string.Empty);
+            SetButtonText(ShowDetailsButton, "ShowDetails");
             ShowDetailsButton.IsEnabled = false;
             ShowDetailsButton.Visibility = Visibility.Visible;
 

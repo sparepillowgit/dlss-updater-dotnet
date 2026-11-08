@@ -67,6 +67,8 @@
     <Compile Include="Services\DlssReleaseClient.cs" />
     <Compile Include="Services\BackupArchiveService.cs" />
     <Compile Include="Services\GameFolderUpdateService.cs" />
+    <Compile Include="Services\Translator.cs" />
+    <Compile Include="Services\FlagIcons.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
