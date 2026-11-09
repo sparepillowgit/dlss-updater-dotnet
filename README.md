@@ -31,6 +31,7 @@ The C#/.NET Framework version keeps the executable lightweight at around 245 KB,
 - Automatically creates per-file backups before updating
 - Choose whether an existing backup is overwritten during an update
 - Restore original files from backups at any time
+- Available in 14 languages
 
 ---
 
@@ -104,6 +105,9 @@ No. DLSS Updater is portable and can be run directly from a folder or USB drive.
 
 **How large is the download?**  
 The executable is around 245 KB, or around 125 KB as a ZIP. Additional space is required when downloading updated DLSS files.
+
+**What languages does it support?**  
+DLSS Updater is available in English, German, French, Spanish, Italian, Polish, Ukrainian, Simplified Chinese, Russian, Japanese, Korean, Czech, Dutch, and Portuguese. It uses your system language by default when supported, and you can change it at any time from the language picker.
 
 **Can updating DLSS files break my applications?**  
 Yes. Newer DLSS versions aren't guaranteed to work correctly with every application. Updating files can cause compatibility issues, visual glitches, or crashes. Back up your original files before updating so you can restore them if necessary.
